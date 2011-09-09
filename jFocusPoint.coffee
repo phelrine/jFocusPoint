@@ -1,69 +1,75 @@
 presentation = null
-
-Array::last = -> @[@length]
-Array::first = -> @[0]
+iterator = null
 
 $(document).ready ->
   $(".draggable").draggable().click(-> false)
   presentation = new Presentation
+  iterator = presentation.iterator()
+
   $("body").append $("<a>").attr(href: "#").text("undo").click (event)->
-    presentation.undo();
+    iterator.undo();
     event.stopPropagation()
   $("body").append $("<a>").attr(href: "#").text("next").click (event)->
-    presentation.next();
+    iterator.next();
     event.stopPropagation()
 
 $(document).click (event)->
-  presentation.next()
+  iterator.next()
 
 class Presentation
   constructor: ->
-    @nextTasks =
+    @tasks =
       [new Task (-> $(".slide").children().hide()), (-> $(".slide").children().show())]
-    @undoTasks = []
     @parseSlide(slide) for slide in $(".slide")
-    @next()
-    @next()
 
   parseSlide: (slide)->
-    @nextTasks.push new SlideTask slide, this
-    @nextTasks.push new HiddenTask hidden for hidden in $(".hidden", slide)
+    @tasks.push new SlideTask slide, this
+    @tasks.push new HiddenTask hidden for hidden in $(".hidden", slide)
     false
 
+  iterator: ->
+    return new PresentationIterator(@tasks)
+
+
+class PresentationIterator
+  constructor: (@tasks) -> @index = 0
+
   next: ->
-    return false if @nextTasks.length == 0
-    task = @nextTasks.shift()
-    task.execute()
-    @undoTasks.push task
+    return false unless @index < @tasks.length
+    @tasks[@index].execute this
+    @index += 1
     true
 
   undo: ->
-    return false if @undoTasks.length == 0
-    task = @undoTasks.pop()
-    task.undo()
-    @nextTasks.unshift(task)
+    return false unless @index > 0
+    @index -= 1
+    @tasks[@index].undo this
     true
+
 
 class Task
   constructor: (@execute, @undo)->
 
+
 class SlideTask extends Task
   constructor: (slide, presentation)->
-    super ->
+    super (it)->
         $(".slide").children().hide()
         $(slide).children().show()
         $(".hidden", slide).hide()
         false
-      ,=>
+      ,(it)=>
         tasks = []
         loop
-          break if presentation.undoTasks.length == 0
-          tasks.unshift presentation.undoTasks.pop()
-          break if tasks.first.constructor.name == @constructor.name
+          break if it.index == 0
+          it.index -= 1
+          tasks.unshift it.tasks[it.index]
+          break if tasks[0].constructor.name == @constructor.name
         for task in tasks
-          task.execute()
-          presentation.undoTasks.push task
+          task.execute(it)
+          it.index += 1
         false
+
 
 class HiddenTask extends Task
   constructor: (hidden)-> super (-> $(hidden).show()), (-> $(hidden).hide())
